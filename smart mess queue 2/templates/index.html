@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Mess Queue Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <header>
+        <h1>🍱 Smart Mess Queue Manager</h1>
+        <p>Real-Time Queue Tracking & Digital Token Counter</p>
+    </header>
+
+    <div class="container">
+        
+        <!-- Left Panel: Get Token & Actions -->
+        <div class="panel">
+            <h2>🎫 Get Your Token</h2>
+            <form id="tokenForm">
+                <div class="form-group">
+                    <label>Student Name:</label>
+                    <input type="text" id="studentName" placeholder="Enter student name" required>
+                </div>
+                <div class="form-group">
+                    <label>Meal Type:</label>
+                    <select id="mealType">
+                        <option value="Regular Thali">Regular Thali</option>
+                        <option value="Special Meal">Special Meal</option>
+                        <option value="Snacks & Tea">Snacks & Tea</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Generate Token</button>
+            </form>
+
+            <hr>
+
+            <h2>👨‍🍳 Staff Panel</h2>
+            <button id="serveBtn" class="btn btn-success">Serve Next Token</button>
+            <div id="servedAlert" class="alert hidden"></div>
+        </div>
+
+        <!-- Right Panel: Queue Status Display -->
+        <div class="panel">
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <small>Queue Size</small>
+                    <h3 id="waitingCount">0</h3>
+                </div>
+                <div class="metric-card">
+                    <small>Est. Wait Time</small>
+                    <h3 id="estWait">0 mins</h3>
+                </div>
+            </div>
+
+            <h2>⏳ Active Queue</h2>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Pos</th>
+                            <th>Token</th>
+                            <th>Name</th>
+                            <th>Meal</th>
+                        </tr>
+                    </thead>
+                    <tbody id="queueTable">
+                        <tr><td colspan="4" class="empty">Queue is currently empty</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h2>✅ Recently Served</h2>
+            <ul id="historyList" class="history-list">
+                <li class="empty">No served tokens yet.</li>
+            </ul>
+        </div>
+
+    </div>
+
+    <script>
+        async function fetchStatus() {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+
+            document.getElementById('waitingCount').innerText = data.waiting_count;
+            document.getElementById('estWait').innerText = `${data.est_wait_time} mins`;
+
+            // Render Queue Table
+            const tbody = document.getElementById('queueTable');
+            if (data.queue.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty">Queue is currently empty</td></tr>';
+            } else {
+                tbody.innerHTML = data.queue.map((item, idx) => `
+                    <tr>
+                        <td><strong>#${idx + 1}</strong></td>
+                        <td><span class="badge">${item.token}</span></td>
+                        <td>${item.name}</td>
+                        <td>${item.meal}</td>
+                    </tr>
+                `).join('');
+            }
+
+            // Render Served History
+            const historyList = document.getElementById('historyList');
+            if (data.history.length === 0) {
+                historyList.innerHTML = '<li class="empty">No served tokens yet.</li>';
+            } else {
+                historyList.innerHTML = data.history.slice(0, 5).map(item => `
+                    <li>
+                        <span><strong>${item.token}</strong> - ${item.name} (${item.meal})</span>
+                        <small>Served: ${item.time_served}</small>
+                    </li>
+                `).join('');
+            }
+        }
+
+        // Handle Token Generation
+        document.getElementById('tokenForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('studentName').value;
+            const meal = document.getElementById('mealType').value;
+
+            const res = await fetch('/api/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, meal })
+            });
+
+            if (res.ok) {
+                document.getElementById('studentName').value = '';
+                fetchStatus();
+            }
+        });
+
+        // Handle Serve Button
+        document.getElementById('serveBtn').addEventListener('click', async () => {
+            const res = await fetch('/api/serve', { method: 'POST' });
+            const alertBox = document.getElementById('servedAlert');
+            const data = await res.json();
+
+            if (data.success) {
+                alertBox.className = "alert alert-success";
+                alertBox.innerText = `Now Serving: ${data.served.token} (${data.served.name})`;
+            } else {
+                alertBox.className = "alert alert-error";
+                alertBox.innerText = data.message;
+            }
+            alertBox.classList.remove('hidden');
+            fetchStatus();
+        });
+
+        // Auto-refresh queue every 3 seconds
+        setInterval(fetchStatus, 3000);
+        fetchStatus();
+    </script>
+</body>
+</html>
